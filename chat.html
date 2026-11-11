@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIKEgpt</title>
+    <link rel="stylesheet" href="chat.css">
+    <!-- Not logged in? Go back to the login page before anything is drawn -->
+    <script>
+        try { if (!localStorage.getItem("mikegpt-user")) location.replace("index.html"); } catch (e) { location.replace("index.html"); }
+    </script>
+    <script src="chat.js" defer></script>
+</head>
+<body>
+    <div class="app-layout">
+        
+        <!-- ================= SECTION 2: SIDEBAR ================= -->
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <div class="sidebar-header">
+                    <!-- Logo Image -->
+                    <img src="image3.jpg" alt="MIKEgpt Logo" class="logo-img">
+                    <span class="logo-name">MIKEgpt</span>
+                </div>
+                <button class="new-chat-btn" id="new-chat-btn">
+                    <ion-icon name="add-outline"></ion-icon>
+                    <span>New chat</span>
+                </button>
+            </div>
+
+            <div class="sidebar-middle">
+                <!-- Navigation Options -->
+                <ul class="sidebar-nav">
+                    <li>
+                        <a href="#" class="nav-item">
+                            <ion-icon name="image-outline"></ion-icon>
+                            <span>Generate Images</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-item">
+                            <ion-icon name="book-outline"></ion-icon>
+                            <span>New Notebook</span>
+                        </a>
+                    </li>
+                </ul>
+
+                <!-- Recent Section -->
+                <div class="recent-container">
+                    <p class="recent-title">Recent</p>
+                </div>
+            </div>
+
+            <!-- Sidebar Bottom: Account Section -->
+            <div class="sidebar-bottom">
+                <div class="account-profile" title="Click twice to log out">
+                    <div class="account-avatar">M</div>
+                    <span class="account-name">My Account</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ================= SECTION 1: MAIN CHAT INTERFACE ================= -->
+        <main class="main-content">
+            <div class="container">
+                <!-- App Header -->
+                <header class="app-header">
+                    <h1 class="heading">Hello, my friend</h1>
+                    <h2 class="sub-heading">How can I help you?</h2>
+                </header>
+
+                <!-- Prompt Container -->
+                <div class="prompt-container">
+                    <div class="prompt-wrapper">
+                        <form action="#" class="prompt-form">
+                            <input type="text" placeholder="Ask MIKEgpt" class="prompt-input">
+                            <div class="prompt-action">
+                                <!-- WhatsApp-style Emoji Button -->
+                                <button type="button" id="emoji-btn" class="icon-btn" title="Add emoji">
+                                    <ion-icon name="happy-outline"></ion-icon>
+                                </button>
+                                
+                                <button type="button" id="add-file-btn" class="icon-btn" title="Add file">
+                                    <ion-icon name="document-outline"></ion-icon>
+                                </button>
+                                
+                                <button type="submit" id="send-btn" class="send-btn" title="Send message">
+                                    <ion-icon name="send"></ion-icon>
+                                </button>
+                            </div>
+                        </form>
+
+                        <button type="button" id="theme-toggled-btn" class="theme-toggled-btn" title="Toggle theme">
+                            <ion-icon name="sunny"></ion-icon>
+                        </button>
+                        <button type="button" id="delete-btn" class="delete-btn" title="Delete conversation">
+                            <ion-icon name="trash"></ion-icon>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+    </div>
+
+    <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+</body>
+</html>
