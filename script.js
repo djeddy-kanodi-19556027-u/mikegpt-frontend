@@ -59,6 +59,10 @@
   .app-header{transition:opacity .45s ease,transform .45s cubic-bezier(.4,0,.2,1)}
   .app-header.leaving{opacity:0;transform:translateY(-24px) scale(.97)}
 
+  /* generated images */
+  .gen-img{display:block;max-width:min(100%,520px);border-radius:14px;margin:6px 0 4px}
+  .gen-dl{display:inline-block;font-size:13px;margin:2px 0 8px;opacity:.85;color:inherit}
+  .nav-item.mode-on{background:rgba(80,110,255,.22)}
   /* attachments */
   .attach-bar{display:flex;flex-wrap:wrap;gap:8px;max-width:980px;margin:0 auto 10px;padding:0 20px}
   .chip{display:inline-flex;align-items:center;gap:6px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);padding:5px 8px 5px 12px;border-radius:999px;font-size:.82rem;animation:pop .3s cubic-bezier(.2,.9,.3,1.4) both}
@@ -184,8 +188,16 @@
   });
 
   /* ---------- 6. Conversations ---------- */
-  let chats = store.get("mikegpt-chats", []);
   let user = store.get("mikegpt-user", null);
+  // every account has its OWN chat history (before, all accounts shared one list)
+  const chatsKey = () => "mikegpt-chats:" + String(user?.email || "guest").trim().toLowerCase();
+  // one time: chats saved by the old version go to the account that is logged in right now
+  try {
+    const old = localStorage.getItem("mikegpt-chats");
+    if (old && user && !localStorage.getItem(chatsKey())) localStorage.setItem(chatsKey(), old);
+    if (old && user) localStorage.removeItem("mikegpt-chats");
+  } catch {}
+  let chats = store.get(chatsKey(), []);
   let activeId = null;
   let busy = false;
   let runToken = 0; // lets us cancel an in-progress reply
@@ -195,7 +207,7 @@
   recentBox.appendChild(recentList);
 
   const activeChat = () => chats.find((c) => c.id === activeId);
-  const save = () => store.set("mikegpt-chats", chats);
+  const save = () => store.set(chatsKey(), chats);
 
   /* ---------- Recent list: three dots → Share / Rename / Pin / Delete ---------- */
   const renderedIds = new Set();   // so only NEW items play the slide-in animation
@@ -446,11 +458,19 @@
 
   /* ---------- 7. Messages ---------- */
   function format(text) {
-    return esc(text)
-      .replace(/```(?:\w+)?\n?([\s\S]*?)(```|$)/g, "<pre><code>$1</code></pre>")
-      .replace(/`([^`\n]+)`/g, "<code>$1</code>")
-      .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
-      .replace(/\n/g, "<br>");
+    return String(text).split(/(```[\s\S]*?(?:```|$))/g).map((seg, i) => {
+      if (i % 2) {                                   // a code block
+        const m = seg.match(/^```(?:\w+)?\n?([\s\S]*?)(?:```)?$/);
+        return "<pre><code>" + esc(m ? m[1] : seg) + "</code></pre>";
+      }
+      return esc(seg.replace(/^\n/, ""))
+        .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+        .replace(/^#{1,6}\s+(.+)$/gm, "<strong>$1</strong>")
+        .replace(/^[ \t]*[*-]\s+/gm, "• ")
+        .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+        .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,:;!?]|$)/g, "$1<em>$2</em>")
+        .replace(/\n/g, "<br>");
+    }).join("");
   }
 
   function scrollDown(smooth = true) {
@@ -514,20 +534,37 @@
      POST http://localhost:3000/api/chat   body: { message: "..." }
      your server.js must answer with:      { reply: "..." }
   ------------------------------------------------------------- */
-  async function getReply(text) {
+  /* Where is the server?
+     - page opened from the server itself (http://localhost:3000, or your online address): same address, nothing to configure
+     - page opened with Live Server / file:// : talk to http://localhost:3000 */
+  const onLocalDev = location.protocol === "file:" ||
+    (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && location.port !== "3000");
+  const API = onLocalDev ? "http://localhost:3000" : "";
+
+  const readFile = (f) => new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve({ name: f.name, mime: f.type || "", data: String(r.result).split(",")[1] || "" });
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(f);
+  });
+
+  const SERVER_DOWN = "⚠️ I can't reach the MIKEgpt server. In VS Code press F5 (or run: npm start), then try again.";
+
+  async function getReply(text, files = []) {
     try {
       // earlier messages of this chat, so the AI remembers the conversation
       const chat = activeChat();
       const history = chat
         ? chat.messages.slice(0, -1).slice(-20)
-            .filter((m) => m.text)
+            .filter((m) => m.text && !m.text.startsWith("⚠️"))   // never send old error messages to the AI
             .map((m) => ({ role: m.role === "user" ? "user" : "model", text: m.text }))
         : [];
 
-      const res = await fetch("http://localhost:3000/api/chat", {
+      const payload = await Promise.all(files.map(readFile));   // the files travel with the message
+      const res = await fetch(API + "/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, history }),
+        body: JSON.stringify({ message: text, history, files: payload, chatId: chat ? chat.id : "" }),
       });
 
       let data = {};
@@ -541,7 +578,31 @@
         ? String(reply)
         : "⚠️ The server answered but sent no text. Make sure server.js ends with res.json({ reply: ... }).";
     } catch (err) {
-      return "⚠️ I can't reach your backend at http://localhost:3000. Open the mikegpt-backend folder in a terminal and run: node server.js";
+      return SERVER_DOWN;
+    }
+  }
+
+  /* ---------- Image generation ---------- */
+  let imageMode = false;
+  const looksLikeImageRequest = (t) =>
+    /^\/(image|img)\b/i.test(t) ||
+    /\b(generate|create|make|draw|paint|design|render)\b.{0,40}\b(image|picture|photo|logo|illustration|drawing|wallpaper|poster|icon)\b/i.test(t) ||
+    /\b(g[ée]n[èe]re|cr[ée]e|dessine|fais|fabrique)\b.{0,40}\b(image|photo|logo|illustration|dessin|affiche)\b/i.test(t);
+
+  async function getImage(prompt, files = []) {
+    try {
+      const payload = await Promise.all(files.filter((f) => /^image\//.test(f.type)).map(readFile));
+      const res = await fetch(API + "/api/image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: prompt.replace(/^\/(image|img)\s*/i, ""), files: payload }),
+      });
+      let data = {};
+      try { data = await res.json(); } catch {}
+      if (!res.ok) return { error: "⚠️ " + (data.error || "The server could not make the image (" + res.status + ").") };
+      return data.image ? { image: data.image, text: data.text || "" } : { error: "⚠️ No image came back. Try describing it differently." };
+    } catch {
+      return { error: SERVER_DOWN };
     }
   }
 
@@ -711,7 +772,7 @@
 
     // start a conversation if needed
     if (!activeChat()) {
-      const c = { id: uid(), title: (text || attachments[0]).slice(0, 36), messages: [] };
+      const c = { id: uid(), title: (text || attachments[0].name).slice(0, 36), messages: [] };
       chats.push(c);
       activeId = c.id;
       showChatMode(true);
@@ -719,6 +780,7 @@
     }
     const chat = activeChat();
     const files = attachments.map((f) => f.name);
+    const sendFiles = attachments.slice();          // real File objects (clearAttachments empties the list)
 
     addMessage("user", text, { files });
     chat.messages.push({ role: "user", text: text || files.map((f) => "📎 " + f).join(", ") });
@@ -738,16 +800,30 @@
     scrollDown(false);
 
     let reply;
-    try { reply = await getReply(text || "file"); }
+    let image = null;
+    try {
+      if (text && (imageMode || looksLikeImageRequest(text))) {
+        const r = await getImage(text, sendFiles);
+        if (r.image) { image = r.image; reply = r.text || ""; } else reply = r.error;
+      } else {
+        reply = await getReply(text, sendFiles);
+      }
+    }
     catch { reply = "Something went wrong reaching the server. Check your connection and try again."; }
 
     if (token !== runToken) { thinking.stop(); return; } // chat was reset meanwhile
     finishThinking(thinkSlot, thinking.stop());           // robot starts talking
+    if (image) {
+      const wrap = document.createElement("div");
+      wrap.innerHTML = '<img class="gen-img" alt="Generated image" src="' + image + '"><a class="gen-dl" download="mikegpt-image.png" href="' + image + '">⬇ Download image</a>';
+      bot.body.insertBefore(wrap, answerSlot);
+      wrap.querySelector("img").addEventListener("load", () => scrollDown(false));
+    }
     const finished = await typeInto(answerSlot, reply, token);
     setHeadState(thinkSlot, "idle");                      // robot calms down when the answer is written
     if (finished === false) return;
 
-    chat.messages.push({ role: "bot", text: reply });
+    chat.messages.push({ role: "bot", text: image ? "🖼️ [Generated image] " + reply : reply });
     save();
     busy = false;
     scrollDown();
@@ -766,6 +842,17 @@
   }
   input.addEventListener("input", updateSendState);
   updateSendState();
+
+  /* ---------- Generate Images switch (sidebar) ---------- */
+  const imageNav = document.querySelectorAll(".sidebar-nav .nav-item")[0];
+  const defaultPlaceholder = input.placeholder;
+  function setImageMode(on) {
+    imageMode = on;
+    imageNav?.classList.toggle("mode-on", on);
+    input.placeholder = on ? "Describe the image you want…" : defaultPlaceholder;
+    toast(on ? "Image mode ON: describe the image you want" : "Image mode OFF");
+  }
+  imageNav?.addEventListener("click", (e) => { e.preventDefault(); setImageMode(!imageMode); input.focus(); });
 
   /* ---------- 10. Attachments ---------- */
   function renderAttachments() {
@@ -788,9 +875,9 @@
 
   fileBtn.addEventListener("click", () => fileInput.click());
   fileInput.addEventListener("change", () => {
-    const max = 10 * 1024 * 1024;
+    const max = 25 * 1024 * 1024;
     [...fileInput.files].forEach((f) => {
-      if (f.size > max) return toast(`${f.name} is over 10 MB`);
+      if (f.size > max) return toast(`${f.name} is over 25 MB`);
       attachments.push(f);
     });
     fileInput.value = "";
@@ -908,6 +995,8 @@
 
     user = { name, email };
     store.set("mikegpt-user", user);
+    chats = store.get(chatsKey(), []);   // load THIS account's chats (empty for a new account)
+    newChat();
 
     loginBtn.disabled = true;
     loginBtn.textContent = "Signing in…";
@@ -940,6 +1029,7 @@
     logoutArmed = false;
     try { localStorage.removeItem("mikegpt-user"); } catch {}
     user = null;
+    chats = [];                          // nothing of the previous account stays on screen
     newChat();
     loginForm.reset();
     document.documentElement.classList.remove("logged-in");
