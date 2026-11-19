@@ -544,7 +544,7 @@
      - page opened with Live Server / file:// : talk to http://localhost:3000 */
   const onLocalDev = location.protocol === "file:" ||
     (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && location.port !== "3000");
-  const API = onLocalDev ? "http://localhost:3000" : "";
+  const API = onLocalDev ? "http://localhost:3000" : "https://mikegpt-backend.onrender.com";
 
   const readFile = (f) => new Promise((resolve, reject) => {
     const r = new FileReader();
