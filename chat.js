@@ -72,6 +72,30 @@
   .attach-bar{display:flex;flex-wrap:wrap;gap:8px;max-width:980px;margin:0 auto 10px;padding:0 20px}
   .chip{display:inline-flex;align-items:center;gap:6px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);padding:5px 8px 5px 12px;border-radius:999px;font-size:.82rem;animation:pop .3s cubic-bezier(.2,.9,.3,1.4) both}
   .chip button{width:20px;height:20px;font-size:.9rem;color:var(--text-secondary)}
+  /* attachment previews (like ChatGPT / Gemini) */
+  .attach-bar{align-items:flex-end}
+  .att-img{position:relative;width:78px;height:78px;border-radius:14px;overflow:hidden;border:1px solid var(--border-color);background:var(--bg-secondary);flex:none;cursor:zoom-in}
+  .att-img img{width:100%;height:100%;object-fit:cover;display:block}
+  .att-x{position:absolute;top:4px;right:4px;width:22px;height:22px;padding:0;border:none;border-radius:50%;background:rgba(0,0,0,.7);color:#fff;font-size:11px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .att-card{position:relative;display:flex;align-items:center;gap:10px;min-width:190px;max-width:270px;padding:8px 38px 8px 8px;border-radius:14px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-primary)}
+  .att-card .att-x{top:50%;right:8px;transform:translateY(-50%)}
+  .att-ico{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex:none}
+  .att-meta{min-width:0;display:flex;flex-direction:column;text-align:left}
+  .att-name{font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .att-sub{font-size:.75rem;opacity:.7}
+  .att-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;align-items:flex-start}
+  .msg-col{display:flex;flex-direction:column;gap:8px;min-width:0;max-width:min(720px,80%)}
+  .msg.user .msg-col{align-items:flex-end}
+  .msg.bot .msg-col{align-items:flex-start}
+  .msg .msg-col .bubble{max-width:100%}
+  .msg-col .att-row{margin:0;justify-content:flex-end}
+  .msg.user .att-card{background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);padding-right:14px;min-width:210px}
+  .msg.user .att-img{width:auto;height:auto;background:none;border:none;cursor:zoom-in}
+  .msg.user .att-img img{width:auto;height:auto;max-width:min(300px,70vw);max-height:300px;border-radius:18px;border:1px solid var(--border-color);box-shadow:0 6px 22px rgba(0,0,0,.35)}
+  .lightbox-bar{position:fixed;top:14px;right:16px;display:flex;gap:10px;z-index:10000}
+  .lightbox-bar a,.lightbox-bar button{background:rgba(255,255,255,.14);color:#fff;border:none;border-radius:999px;padding:8px 16px;font-size:.9rem;cursor:pointer;text-decoration:none}
+  .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;z-index:9999;cursor:zoom-out}
+  .lightbox img{max-width:92vw;max-height:92vh;border-radius:12px}
   .msg.user .chip{background:rgba(255,255,255,.18);border-color:transparent;color:#fff;padding:4px 12px}
 
   /* emoji picker */
@@ -112,7 +136,7 @@
   @keyframes toastOut{to{opacity:0;transform:translateY(-10px)}}
   @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
   @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
-  @media (max-width:768px){.emoji-picker{right:0;width:min(300px,92vw)}.msg .bubble{max-width:86%}}
+  @media (max-width:768px){.emoji-picker{right:0;width:min(300px,92vw)}.msg-col{max-width:86%}}
   `;
   const styleEl = document.createElement("style");
   styleEl.textContent = css;
@@ -442,7 +466,7 @@
     chatInner.innerHTML = "";
     const c = activeChat();
     if (c) {
-      c.messages.forEach((m) => addMessage(m.role, m.text, { instant: true }));
+      c.messages.forEach((m) => addMessage(m.role, m.files?.length && String(m.text).startsWith("📎") ? "" : m.text, { instant: true, files: m.files }));
       showChatMode(true);
     }
     renderRecent();
@@ -492,27 +516,25 @@
     if (role === "bot" && logoSrc) av.innerHTML = `<img src="${logoSrc}" alt="">`;
     else av.textContent = role === "bot" ? "AI" : (user?.name?.[0] || "M").toUpperCase();
 
-    const bubble = document.createElement("div");
-    bubble.className = "bubble";
+    const col = document.createElement("div");
+    col.className = "msg-col";
 
     if (opts.files?.length) {
-      const chips = document.createElement("div");
-      chips.className = "chips";
-      opts.files.forEach((f) => {
-        const c = document.createElement("span");
-        c.className = "chip";
-        c.textContent = "📎 " + f;
-        chips.appendChild(c);
-      });
-      bubble.appendChild(chips);
+      const row = document.createElement("div");
+      row.className = "att-row";
+      opts.files.forEach((f) => row.appendChild(attachmentView(typeof f === "string" ? { name: f } : f)));
+      col.appendChild(row);
     }
 
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
     const body = document.createElement("div");
     body.className = "body";
     if (text !== null) body.innerHTML = format(text);
     bubble.appendChild(body);
+    if (!(role === "user" && opts.files?.length && !String(text || "").trim())) col.appendChild(bubble);   // only files: no empty bubble
 
-    el.append(av, bubble);
+    el.append(av, col);
     chatInner.appendChild(el);
     if (!opts.instant) scrollDown();
     return { el, body };
@@ -540,18 +562,114 @@
      your server.js must answer with:      { reply: "..." }
   ------------------------------------------------------------- */
   /* Where is the server?
-     - page opened from the server itself (http://localhost:3000, or your online address): same address, nothing to configure
-     - page opened with Live Server / file:// : talk to http://localhost:3000 */
-  const onLocalDev = location.protocol === "file:" ||
-    (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && location.port !== "3000");
-  const API = onLocalDev ? "http://localhost:3000" : "https://mikegpt-backend.onrender.com";
+     Ask the page's own address first (works when the server shows the website: localhost:3000 or your online address).
+     If nothing answers there (Live Server on port 5500, or a file opened directly), use http://localhost:3000. */
+  let API = "";
+  let sameOrigin = false;
+  async function pickAPI() {
+    if (sameOrigin) return;
+    try {
+      const r = await fetch("/api/health", { cache: "no-store" });
+      sameOrigin = r.ok && (await r.json()).ok === true;
+    } catch { sameOrigin = false; }
+    API = sameOrigin ? "" : "http://localhost:3000";
+  }
 
-  const readFile = (f) => new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve({ name: f.name, mime: f.type || "", data: String(r.result).split(",")[1] || "" });
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(f);
-  });
+  /* ---------- attachment previews ---------- */
+  function fileExt(name) { return (String(name).split(".").pop() || "").toLowerCase(); }
+  function fmtSize(n) { return !n ? "" : n < 1024 ? n + " B" : n < 1048576 ? Math.round(n / 1024) + " KB" : (n / 1048576).toFixed(1) + " MB"; }
+  function fileColor(ext) {
+    if (ext === "pdf") return "#e5484d";
+    if (["doc", "docx", "odt", "txt", "md", "rtf"].includes(ext)) return "#2b6cd9";
+    if (["xls", "xlsx", "csv", "tsv"].includes(ext)) return "#1f9d55";
+    if (["ppt", "pptx"].includes(ext)) return "#e8590c";
+    if (["zip", "rar", "7z", "tar", "gz"].includes(ext)) return "#6b7280";
+    if (["mp4", "mov", "webm", "avi", "mkv", "mpeg", "mpg"].includes(ext)) return "#8b5cf6";
+    if (["mp3", "wav", "ogg", "flac", "m4a", "aac"].includes(ext)) return "#d946ef";
+    if (["js", "ts", "py", "java", "c", "cpp", "html", "css", "json", "xml", "sql"].includes(ext)) return "#334155";
+    return "#64748b";
+  }
+  function openLightbox(src, name) {
+    const box = document.createElement("div");
+    box.className = "lightbox";
+    box.innerHTML = '<img alt="" src="' + src + '"><div class="lightbox-bar"><a download="' + esc(name || "image") + '" href="' + src + '">⬇ Download</a><button type="button">✕ Close</button></div>';
+    const close = () => { box.remove(); document.removeEventListener("keydown", onKey); };
+    const onKey = (e) => { if (e.key === "Escape") close(); };
+    box.addEventListener("click", (e) => { if (!e.target.closest(".lightbox-bar a")) close(); });
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(box);
+  }
+  // meta = { name, size, type, url?, thumb? }; onRemove adds the little X button
+  function attachmentView(meta, onRemove) {
+    const src = meta.url || meta.thumb || "";
+    const ext = fileExt(meta.name);
+    const isImg = (/^image\//.test(meta.type || "") || ["jpg", "jpeg", "png", "webp", "gif", "bmp", "avif"].includes(ext)) && src;
+    const el = document.createElement("div");
+    if (isImg) {
+      el.className = "att-img";
+      el.title = meta.name;
+      el.innerHTML = '<img alt="' + esc(meta.name) + '" src="' + src + '">';
+      el.addEventListener("click", () => openLightbox(src, meta.name));
+    } else {
+      el.className = "att-card";
+      el.innerHTML = '<div class="att-ico" style="background:' + fileColor(ext) + '">' + esc((ext || "file").slice(0, 4).toUpperCase()) + '</div>' +
+        '<div class="att-meta"><span class="att-name">' + esc(meta.name) + '</span><span class="att-sub">' + esc([ext ? ext.toUpperCase() : "File", fmtSize(meta.size)].filter(Boolean).join(" · ")) + '</span></div>';
+    }
+    if (onRemove) {
+      const x = document.createElement("button");
+      x.type = "button";
+      x.className = "att-x";
+      x.textContent = "✕";
+      x.title = "Remove";
+      x.addEventListener("click", (e) => { e.stopPropagation(); onRemove(); });
+      el.appendChild(x);
+    }
+    return el;
+  }
+  function makeThumb(file) {                       // small picture saved with the chat so it is still visible after a reload
+    return new Promise((resolve) => {
+      if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type)) return resolve("");
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const k = Math.min(1, 160 / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(img.width * k));
+        c.height = Math.max(1, Math.round(img.height * k));
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        resolve(c.toDataURL("image/jpeg", 0.6));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(""); };
+      img.src = url;
+    });
+  }
+
+  // big camera photos are made smaller first: faster upload, same result for the AI
+  async function shrinkImage(f) {
+    if (!/^image\/(jpeg|png|webp)$/.test(f.type) || f.size < 1.2 * 1024 * 1024) return f;
+    try {
+      const bmp = await createImageBitmap(f);
+      const k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(bmp.width * k);
+      c.height = Math.round(bmp.height * k);
+      c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+      const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.85));
+      if (blob && blob.size < f.size) return new File([blob], f.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" });
+    } catch {}
+    return f;
+  }
+
+  const readFile = async (orig) => {
+    const f = await shrinkImage(orig);
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve({ name: f.name, mime: f.type || "", data: String(r.result).split(",")[1] || "" });
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(f);
+    });
+  };
 
   const SERVER_DOWN = "⚠️ I can't reach the MIKEgpt server. In VS Code press F5 (or run: npm start), then try again.";
 
@@ -565,6 +683,7 @@
             .map((m) => ({ role: m.role === "user" ? "user" : "model", text: m.text }))
         : [];
 
+      await pickAPI();
       const payload = await Promise.all(files.map(readFile));   // the files travel with the message
       const res = await fetch(API + "/api/chat", {
         method: "POST",
@@ -583,7 +702,8 @@
         ? String(reply)
         : "⚠️ The server answered but sent no text. Make sure server.js ends with res.json({ reply: ... }).";
     } catch (err) {
-      return SERVER_DOWN;
+      console.error("MIKEgpt request failed:", err);
+      return /fetch|network|load failed/i.test(String(err && err.message)) ? SERVER_DOWN : "⚠️ Could not send your message: " + ((err && err.message) || err);
     }
   }
 
@@ -596,6 +716,7 @@
 
   async function getImage(prompt, files = []) {
     try {
+      await pickAPI();
       const payload = await Promise.all(files.filter((f) => /^image\//.test(f.type)).map(readFile));
       const res = await fetch(API + "/api/image", {
         method: "POST",
@@ -606,8 +727,9 @@
       try { data = await res.json(); } catch {}
       if (!res.ok) return { error: "⚠️ " + (data.error || "The server could not make the image (" + res.status + ").") };
       return data.image ? { image: data.image, text: data.text || "" } : { error: "⚠️ No image came back. Try describing it differently." };
-    } catch {
-      return { error: SERVER_DOWN };
+    } catch (err) {
+      console.error("MIKEgpt image request failed:", err);
+      return { error: /fetch|network|load failed/i.test(String(err && err.message)) ? SERVER_DOWN : "⚠️ Could not send your request: " + ((err && err.message) || err) };
     }
   }
 
@@ -784,12 +906,15 @@
       renderRecent();
     }
     const chat = activeChat();
-    const files = attachments.map((f) => f.name);
+    const files = attachments.map((f) => ({ name: f.name, size: f.size, type: f.type, url: f._url || "" }));
     const sendFiles = attachments.slice();          // real File objects (clearAttachments empties the list)
 
     addMessage("user", text, { files });
-    chat.messages.push({ role: "user", text: text || files.map((f) => "📎 " + f).join(", ") });
+    const userMsg = { role: "user", text: text || files.map((f) => "📎 " + f.name).join(", ") };
+    if (files.length) userMsg.files = files.map((f) => ({ name: f.name, size: f.size, type: f.type }));
+    chat.messages.push(userMsg);
     save();
+    if (files.length) Promise.all(sendFiles.map(makeThumb)).then((th) => { userMsg.files.forEach((m, i) => { if (th[i]) m.thumb = th[i]; }); save(); });
     input.value = "";
     clearAttachments();
     updateSendState();
@@ -807,7 +932,10 @@
     let reply;
     let image = null;
     try {
-      if (text && (imageMode || looksLikeImageRequest(text))) {
+      const wantsAnalysis = sendFiles.length > 0 &&
+        /\b(describe|explain|what|who|where|read|summari[sz]e|analy[sz]e|translate|extract|d[ée]cris|explique|r[ée]sume|traduis|lis)\b/i.test(text);
+      if (text && !wantsAnalysis && (imageMode || looksLikeImageRequest(text))) {
+        if (imageMode) setImageMode(false, true);                  // one picture per click, like ChatGPT
         const r = await getImage(text, sendFiles);
         if (r.image) { image = r.image; reply = r.text || ""; } else reply = r.error;
       } else {
@@ -851,11 +979,11 @@
   /* ---------- Generate Images switch (sidebar) ---------- */
   const imageNav = document.querySelectorAll(".sidebar-nav .nav-item")[0];
   const defaultPlaceholder = input.placeholder;
-  function setImageMode(on) {
+  function setImageMode(on, quiet) {
     imageMode = on;
     imageNav?.classList.toggle("mode-on", on);
     input.placeholder = on ? "Describe the image you want…" : defaultPlaceholder;
-    toast(on ? "Image mode ON: describe the image you want" : "Image mode OFF");
+    if (!quiet) toast(on ? "Image mode ON: describe the image you want" : "Image mode OFF");
   }
   imageNav?.addEventListener("click", (e) => { e.preventDefault(); setImageMode(!imageMode); input.focus(); });
 
@@ -864,16 +992,11 @@
     attachBar.innerHTML = "";
     attachBar.hidden = !attachments.length;
     attachments.forEach((f, i) => {
-      const c = document.createElement("span");
-      c.className = "chip";
-      c.innerHTML = `<span>📎 ${esc(f.name)}</span>`;
-      const x = document.createElement("button");
-      x.type = "button";
-      x.textContent = "✕";
-      x.title = "Remove";
-      x.addEventListener("click", () => { attachments.splice(i, 1); renderAttachments(); updateSendState(); });
-      c.appendChild(x);
-      attachBar.appendChild(c);
+      if (!f._url && /^image\//.test(f.type)) f._url = URL.createObjectURL(f);
+      attachBar.appendChild(attachmentView(
+        { name: f.name, size: f.size, type: f.type, url: f._url || "" },
+        () => { if (f._url) URL.revokeObjectURL(f._url); attachments.splice(i, 1); renderAttachments(); updateSendState(); }
+      ));
     });
   }
   function clearAttachments() { attachments = []; renderAttachments(); }
