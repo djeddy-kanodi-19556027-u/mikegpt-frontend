@@ -553,11 +553,11 @@
   }
 
     /* ---------- 8. The "brain": connects to YOUR backend ----------
-     POST http://localhost:3000/api/chat   body: { message: "..." }
+     POST https://mikegpt-backend.onrender.com/api/chat   body: { message: "..." }
      your server.js must answer with:      { reply: "..." }
   ------------------------------------------------------------- */
   /* Where is the server?
-     Ask the page's own address first (works when the server shows the website: localhost:3000 or your online address).
+     Ask the page's own address first (works when the server shows the website: https://mikegpt-backend.onrender.com or your online address).
      If nothing answers there (Live Server on port 5500, or a file opened directly), use http://localhost:3000. */
   let API = "";
   let sameOrigin = false;
@@ -567,7 +567,7 @@
       const r = await fetch("/api/health", { cache: "no-store" });
       sameOrigin = r.ok && (await r.json()).ok === true;
     } catch { sameOrigin = false; }
-    API = sameOrigin ? "" : "http://localhost:3000";
+    API = sameOrigin ? "" : "https://mikegpt-backend.onrender.com";
   }
 
   /* ---------- attachment previews ---------- */
